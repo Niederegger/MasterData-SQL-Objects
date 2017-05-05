@@ -1,9 +1,13 @@
 -- 27.04.17 KB: Ersten Entwurf der Prozedur erstellt.
 --              Die Prozedur überträgt Daten von VV_MASTERVALUES_UPLOAD nach VV_MASTERVALUES
 --              und übernimmt dabei nur Werte, die sich tatsächlich geändert haben
+-- 05.05.17 KB: if exist und drop/create genutzt statt ALTER PROCEDURE
 
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[vvsp_import_upload]') )
+  drop procedure dbo.vvsp_import_upload
+go
 
-alter procedure dbo.vvsp_import_upload
+create procedure dbo.vvsp_import_upload
 as
 
 Set NOCOUNT ON
