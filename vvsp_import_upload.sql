@@ -76,7 +76,8 @@ begin tran
 
 commit
 print 'procedure finished, '+CONVERT(varchar(12),@received_rows)+' rows received, '
-                               +CONVERT(varchar(12),@existing_rows)+' rows deleted, '  
+                               +CONVERT(varchar(12),@identical_rows)+' duplicate rows deleted, '  
+                               +CONVERT(varchar(12),@existing_rows)+' existing rows deleted, '  
                                +CONVERT(varchar(12),@inserted_rows)+' rows inserted, '
 
 -----------------------------------------------------------------------------------------
