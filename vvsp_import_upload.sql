@@ -49,7 +49,8 @@ begin tran
     from vv_mastervalues_upload T1
    inner join vv_mastervalues 
       on MVU_SOURCE_ID = MV_SOURCE_ID
-     and MVU_ISIN = MV_ISIN        
+     and MVU_ISIN = MV_ISIN    
+     and MV_FIELDNAME = MVU_FIELDNAME    
      and ((MVU_MIC is null and MV_MIC is null) or MVU_MIC = MV_MIC )
      and ((MVU_AS_OF_DATE is null and  MV_AS_OF_DATE  is null) or MVU_AS_OF_DATE = MV_AS_OF_DATE)
      and ((MVU_STRINGVALUE is null and MV_STRINGVALUE is null) or MVU_STRINGVALUE = MV_STRINGVALUE)
