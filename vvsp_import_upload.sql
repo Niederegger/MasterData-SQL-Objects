@@ -2,6 +2,8 @@
 --              Die Prozedur überträgt Daten von VV_MASTERVALUES_UPLOAD nach VV_MASTERVALUES
 --              und übernimmt dabei nur Werte, die sich tatsächlich geändert haben
 -- 05.05.17 KB: if exist und drop/create genutzt statt ALTER PROCEDURE
+use MasterData
+go
 
 if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[vvsp_import_upload]') )
   drop procedure dbo.vvsp_import_upload
