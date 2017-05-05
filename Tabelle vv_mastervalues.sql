@@ -39,6 +39,11 @@ GO
 
 select top 99 * from vv_mastervalues where MV_MIC is null
 
+--- Daten erhalten, wenn Tabelle neu CREATED wird:
+select * into #tmp from vv_mastervalues
+insert vv_mastervalues select * from #tmp 
+drop table #tmp 
+
 -- Insert ohne Datumsangabe (nutzt getdate als default), ohne MIC (Börsenunabhängig) und ohne AS_OF_DATE (nicht Stichtagsbezogen):
 Insert vv_mastervalues ( MV_ISIN, MV_FIELDNAME, MV_STRINGVALUE, MV_SOURCE, MV_URLSOURCE, MV_COMMENT )
   values ('DE0007100000', 'A1-FULLNAME', 'DAIMLER AG NAMENS-AKTIEN O.N.', 'manuell', '','von Kay')

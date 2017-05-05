@@ -15,9 +15,9 @@ as
 Set NOCOUNT ON
 
 declare @received_rows int
+declare @identical_rows int
 declare @deleted_rows int
 declare @inserted_rows int
-
 
 ----- Eintrag in VV_LOG machen
 insert vv_log 

@@ -31,8 +31,17 @@ GO
 ---------------------------------------------------------------------------------------------------------------------------------
 /*   sp_spaceused vv_log
 
-select top 99 * from vv_log
+--- kurze Abfrage mit aktuell=oben:
+select top 99 * from vv_log order by LOG_TIMESTAMP desc
 
+
+--- Daten erhalten, wenn Tabelle neu CREATED wird:
+select * into #xxx from vv_log
+insert vv_log select * from #xxx 
+drop table #xxx
+
+
+--- 
 select top 50 row_number() over (partition by MV_ISIN order by MV_ISIN),* from vv_mastervalues
 select top 5 * from vv_mastervalues_upload
 

@@ -1,5 +1,6 @@
 -- 26.04.2017 KB: Tabelle dbo.vv_mastervalues erstellt und Testdaten ausgedacht
 -- 27.04.2017 KB: MV_SOURCE_ID eingefügt und statt MV_SOURCE jetzt MV_DATA_ORIGIN. MV_FIELDNAME verlängert.
+-- 05.05.2017 KB: Bugfix bei Index und constraint
 
 Use MasterData
 go
@@ -15,7 +16,7 @@ CREATE TABLE dbo.vv_mastervalues_upload
   MVU_MIC         char(4),            -- Market Identifier Code, Kennung der Börse, 4stellig nach ISO10383. Kann Schlüssel sein (zB bei Kursen), wenn unnötig, dann NULL (zB bei WP-Name)
   MVU_AS_OF_DATE  date,               -- wird auf ein Datum gesetzt, wenn der Wert sich auf ein bestimtes Datum bezieht (z.b bei Kursen oder Handelsvolumen). sonst NULL.
   MVU_FIELDNAME   char(48) NOT NULL,  -- Name des Stammdatenfelds, z.B. "123XYZ_LONGNAME" (oder zB 'Closing Price Previous Business Day' bei DBAG)
-  MVU_TIMESTAMP   datetime NOT NULL CONSTRAINT mv_timestamp_GETDATE DEFAULT GETDATE() ,   -- Datum, wann dieses Feld geschrieben wurde (es gibt hier nie updates, max timestamp= aktuell)
+  MVU_TIMESTAMP   datetime NOT NULL CONSTRAINT mvu_timestamp_GETDATE DEFAULT GETDATE() ,   -- Datum, wann dieses Feld geschrieben wurde (es gibt hier nie updates, max timestamp= aktuell)
   MVU_STRINGVALUE varchar(256),       -- Der Wert des Felds, zB "DAIMLER AG NAMENS-AKTIEN O.N."
   MVU_DATA_ORIGIN varchar(256),       -- Die Quelle, woher wir diesen wert haben, zB "File 20170426_Frankfurt_Data.csv"
   MVU_URLSOURCE   varchar(256),       -- Wenn relevant, der URL-Link der Quelle, zB "http://www.deutsche-boerse-cash-market.com/dbcm-de/instrumente-statistiken/alle-handelbaren-instrumente/boersefrankfurt"
@@ -23,19 +24,19 @@ CREATE TABLE dbo.vv_mastervalues_upload
 )
   
 
-CREATE  CLUSTERED  INDEX vv_mastervalues_upload_index1 ON dbo.vv_mastervalues(MVU_TIMESTAMP, MVU_ISIN, MVU_FIELDNAME) WITH  FILLFACTOR = 95
+CREATE  CLUSTERED  INDEX vv_mastervalues_upload_index1 ON dbo.vv_mastervalues_upload(MVU_TIMESTAMP, MVU_ISIN, MVU_FIELDNAME) WITH  FILLFACTOR = 95
 GO
 
-CREATE  INDEX vv_mastervalues_upload_index2 ON dbo.vv_mastervalues(MV_ISIN, MV_MIC, MV_AS_OF_DATE, MV_FIELDNAME, mv_timestamp) WITH  FILLFACTOR = 90
+CREATE  INDEX vv_mastervalues_upload_index2 ON dbo.vv_mastervalues_upload(MVU_ISIN, MVU_MIC, MVU_AS_OF_DATE, MVU_FIELDNAME, MVU_TIMESTAMP) WITH  FILLFACTOR = 90
 GO
-
 
 -- GRANT SELECT, UPDATE ON [dbo].[fvs_analyse_ergebnis]  TO [Verwalten]
 ---------------------------------------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------------------------------------
-/*   sp_spaceused vv_mastervalues
+/*   sp_spaceused vv_mastervalues_upload
 
-select top 99 * from vv_mastervalues where MV_MIC is null
+select top 99 * from vv_mastervalues_upload 
+
 
 -- Insert ohne Datumsangabe (nutzt getdate als default), ohne MIC (Börsenunabhängig) und ohne AS_OF_DATE (nicht Stichtagsbezogen):
 Insert vv_mastervalues ( MV_ISIN, MV_FIELDNAME, MV_STRINGVALUE, MV_SOURCE, MV_URLSOURCE, MV_COMMENT )
