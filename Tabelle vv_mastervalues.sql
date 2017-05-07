@@ -1,5 +1,6 @@
 -- 26.04.2017 KB: Tabelle dbo.vv_mastervalues erstellt und Testdaten ausgedacht
 -- 27.04.2017 KB: MV_SOURCE_ID eingefügt und statt MV_SOURCE jetzt MV_DATA_ORIGIN. MV_FIELDNAME verlängert.
+-- 07.05.2017 KB: Added field MV_UPLOAD_ID to identify each upload-batch 
 
 Use MasterData
 go
@@ -11,6 +12,7 @@ GO
 CREATE TABLE dbo.vv_mastervalues
 (
   MV_SOURCE_ID   char(8),            -- z.B. DBAG für "Deutsche Böse AG", definiert u.a. welche Felder kommen. Könnte zukünftig auch "USER" für Benutzeränderungen nach WIKI-Methodik enthalten.
+  MV_UPLOAD_ID   int,                -- a counter which increases by one for each upload-batch
   MV_ISIN        char(12) NOT NULL,  -- ISIN des Wertpapiers, zB DE0007100000
   MV_MIC         char(4),            -- Market Identifier Code, Kennung der Börse, 4stellig nach ISO10383. Kann Schlüssel sein (zB bei Kursen), wenn unnötig, dann NULL (zB bei WP-Name)
   MV_AS_OF_DATE  date,               -- wird auf ein Datum gesetzt, wenn der Wert sich auf ein bestimtes Datum bezieht (z.b bei Kursen oder Handelsvolumen). sonst NULL.
@@ -41,7 +43,8 @@ select top 99 * from vv_mastervalues where MV_MIC is null
 
 --- Daten erhalten, wenn Tabelle neu CREATED wird:
 select * into #tmp from vv_mastervalues
-insert vv_mastervalues select * from #tmp 
+insert vv_mastervalues select MV_SOURCE_ID, 100, MV_ISIN, MV_MIC,   MV_AS_OF_DATE ,  MV_FIELDNAME  ,  MV_TIMESTAMP  ,  MV_STRINGVALUE,  MV_DATA_ORIGIN,  MV_URLSOURCE  ,  MV_COMMENT  
+from #tmp 
 drop table #tmp 
 
 -- Insert ohne Datumsangabe (nutzt getdate als default), ohne MIC (Börsenunabhängig) und ohne AS_OF_DATE (nicht Stichtagsbezogen):
