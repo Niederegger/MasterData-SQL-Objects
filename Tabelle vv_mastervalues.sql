@@ -1,6 +1,7 @@
 -- 26.04.2017 KB: Tabelle dbo.vv_mastervalues erstellt und Testdaten ausgedacht
 -- 27.04.2017 KB: MV_SOURCE_ID eingefügt und statt MV_SOURCE jetzt MV_DATA_ORIGIN. MV_FIELDNAME verlängert.
 -- 07.05.2017 KB: Added field MV_UPLOAD_ID to identify each upload-batch 
+-- 08.06.2017 KB; Added field MV_LAST_SEEN, removed MV_DATA_ORIGIN and MV_URLSOURCE (now in vv_uploads table)
 
 Use MasterData
 go
@@ -11,27 +12,26 @@ GO
 
 CREATE TABLE dbo.vv_mastervalues
 (
-  MV_SOURCE_ID   char(8),            -- z.B. DBAG für "Deutsche Böse AG", definiert u.a. welche Felder kommen. Könnte zukünftig auch "USER" für Benutzeränderungen nach WIKI-Methodik enthalten.
-  MV_UPLOAD_ID   int,                -- a counter which increases by one for each upload-batch
-  MV_ISIN        char(12) NOT NULL,  -- ISIN des Wertpapiers, zB DE0007100000
-  MV_MIC         char(4),            -- Market Identifier Code, Kennung der Börse, 4stellig nach ISO10383. Kann Schlüssel sein (zB bei Kursen), wenn unnötig, dann NULL (zB bei WP-Name)
-  MV_AS_OF_DATE  date,               -- wird auf ein Datum gesetzt, wenn der Wert sich auf ein bestimtes Datum bezieht (z.b bei Kursen oder Handelsvolumen). sonst NULL.
-  MV_FIELDNAME   char(48) NOT NULL,  -- Name des Stammdatenfelds, z.B. "123XYZ_LONGNAME" (oder zB 'Closing Price Previous Business Day' bei DBAG)
-  MV_TIMESTAMP   datetime NOT NULL CONSTRAINT mv_timestamp_GETDATE DEFAULT GETDATE() ,   -- Datum, wann dieses Feld geschrieben wurde (es gibt hier nie updates, max timestamp= aktuell)
-  MV_STRINGVALUE varchar(256),       -- Der Wert des Felds, zB "DAIMLER AG NAMENS-AKTIEN O.N."
-  MV_DATA_ORIGIN varchar(256),       -- Die Quelle, woher wir diesen wert haben, zB "File 20170426_Frankfurt_Data.csv"
-  MV_URLSOURCE   varchar(256),       -- Wenn relevant, der URL-Link der Quelle, zB "http://www.deutsche-boerse-cash-market.com/dbcm-de/instrumente-statistiken/alle-handelbaren-instrumente/boersefrankfurt"
-  MV_COMMENT     varchar(256)        -- Optional für freie Kommentare, z.B. "manueller upload nach Formatänderung"
+  MV_SOURCE_ID    char(8),            -- z.B. DBAG für "Deutsche Böse AG", definiert u.a. welche Felder kommen. Könnte zukünftig auch "USER" für Benutzeränderungen nach WIKI-Methodik enthalten.
+  MV_UPLOAD_ID    int,                -- a counter which increases by one for each upload-batch
+  MV_ISIN         char(12) NOT NULL,  -- ISIN des Wertpapiers, zB DE0007100000
+  MV_MIC          char(4),            -- Market Identifier Code, Kennung der Börse, 4stellig nach ISO10383. Kann Schlüssel sein (zB bei Kursen), wenn unnötig, dann NULL (zB bei WP-Name)
+  MV_AS_OF_DATE   date,               -- wird auf ein Datum gesetzt, wenn der Wert sich auf ein bestimtes Datum bezieht (z.b bei Kursen oder Handelsvolumen). sonst NULL.
+  MV_FIELDNAME    char(48) NOT NULL,  -- Name des Stammdatenfelds, z.B. "123XYZ_LONGNAME" (oder zB 'Closing Price Previous Business Day' bei DBAG)
+  MV_TIMESTAMP    datetime NOT NULL CONSTRAINT mv_timestamp_GETDATE DEFAULT GETDATE() ,   -- Datum, wann dieses Feld geschrieben wurde (es gibt hier nie updates, max timestamp= aktuell)
+  MV_LAST_SEEN    datetime,           -- Der Zeitpunkt, wann dieser Wert das letzte mal so von der Quelle geliefert wurde  
+  MV_STRINGVALUE  varchar(256),       -- Der Wert des Felds, zB "DAIMLER AG NAMENS-AKTIEN O.N."
+  MV_COMMENT      varchar(256)        -- Optional für freie Kommentare, z.B. "manuelle Korrektur" 
 )
   
 
-CREATE  CLUSTERED  INDEX vv_mastervalues_index1 ON dbo.vv_mastervalues(mv_timestamp, MV_ISIN, MV_FIELDNAME) WITH  FILLFACTOR = 95
+CREATE  CLUSTERED  INDEX vv_mastervalues_index1 ON dbo.vv_mastervalues(mv_timestamp, MV_ISIN, MV_FIELDNAME) WITH  FILLFACTOR = 95 -- clustered nach Timestamp, d.h. wächst i.d.R. nur am Ende weiter
 GO
 
-CREATE  INDEX vv_mastervalues_index2 ON dbo.vv_mastervalues(MV_ISIN, MV_MIC, MV_AS_OF_DATE, MV_FIELDNAME, mv_timestamp) WITH  FILLFACTOR = 90
+CREATE  INDEX vv_mastervalues_index2 ON dbo.vv_mastervalues(MV_ISIN, MV_MIC, MV_FIELDNAME, MV_AS_OF_DATE) WITH  FILLFACTOR = 90 -- für Kurssuche
 GO
 
-CREATE  INDEX vv_mastervalues_index3 ON dbo.vv_mastervalues(MV_ISIN, mv_timestamp, MV_FIELDNAME) WITH  FILLFACTOR = 90
+CREATE  INDEX vv_mastervalues_index3 ON dbo.vv_mastervalues(MV_ISIN, MV_FIELDNAME) WITH  FILLFACTOR = 90  -- für Suche nach anderen Feldern
 GO
 
 -- GRANT SELECT, UPDATE ON [dbo].[fvs_analyse_ergebnis]  TO [Verwalten]
@@ -42,10 +42,15 @@ GO
 select top 99 * from vv_mastervalues where MV_MIC is null
 
 --- Daten erhalten, wenn Tabelle neu CREATED wird:
-select * into #tmp from vv_mastervalues
-insert vv_mastervalues select MV_SOURCE_ID, 100, MV_ISIN, MV_MIC,   MV_AS_OF_DATE ,  MV_FIELDNAME  ,  MV_TIMESTAMP  ,  MV_STRINGVALUE,  MV_DATA_ORIGIN,  MV_URLSOURCE  ,  MV_COMMENT  
-from #tmp 
-drop table #tmp 
+select * into vv_mastervalues_bak20170608 from vv_mastervalues
+
+insert vv_mastervalues 
+  select MV_SOURCE_ID, MV_UPLOAD_ID, MV_ISIN, MV_MIC,   MV_AS_OF_DATE ,  MV_FIELDNAME  ,  MV_TIMESTAMP  ,MV_LAST_SEEN,  MV_STRINGVALUE, MV_COMMENT  
+from vv_mastervalues_bak20170608 
+
+select count(*) from vv_mastervalues
+select count(*) from vv_mastervalues_bak20170608 
+select top 9 * from vv_mastervalues_bak20170608 
 
 -- Insert ohne Datumsangabe (nutzt getdate als default), ohne MIC (Börsenunabhängig) und ohne AS_OF_DATE (nicht Stichtagsbezogen):
 Insert vv_mastervalues ( MV_ISIN, MV_FIELDNAME, MV_STRINGVALUE, MV_SOURCE, MV_URLSOURCE, MV_COMMENT )
@@ -83,5 +88,14 @@ values
   ('DE0007100000', 'XETR', '20170329', 'A3-PRICE', '72,36', 'manuell','','von Kay'),
   ('DE0007100000', 'XETR', '20170328', 'A3-PRICE', '71,63', 'manuell','','von Kay'),
   ('DE0007100000', 'XETR', '20170327', 'A3-PRICE', '70,48', 'manuell','','von Kay')
+vorher auf ACER:
+name              rows                 reserved           data               index_size         unused
+----------------- -------------------- ------------------ ------------------ ------------------ ------------------
+vv_mastervalues   2198851              1191448 KB         634480 KB          556752 KB          216 KB
+
+name              rows                 reserved           data               index_size         unused
+----------------- -------------------- ------------------ ------------------ ------------------ ------------------
+vv_mastervalues   2198851              650776 KB          298296 KB          352328 KB          152 KB
+
 
 */
