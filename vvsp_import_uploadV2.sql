@@ -4,6 +4,7 @@
 -- 05.05.17 KB: if exist und drop/create genutzt statt ALTER PROCEDURE. Added logic to remove duplicate rows.
 -- 07.05.17 KB: Neues Feld MV_UPLOAD_ID eingebaut
 -- 08.06.17 KB: Neues Feld MV_LAST_SEEN behandelt, NEue Tabelle vv_updates eingebaut, neue Version uploadV2 (alte Vers=wrapper)
+-- 18.06.17 KB: In der Datenübernahme in vv_mastervalues (Step5) statt @COMMENT jetzt Feld MVU_COMMENT aus der Quelltabelle genutzt
 
 use MasterData
 go
@@ -95,7 +96,7 @@ begin tran
   -- STEP 5: verbliebene Daten nun in Zieltabelle aufnehmen (Feld MV_LAST_SEEN nicht, bleibt NULL)
   insert vv_mastervalues 
         (MV_SOURCE_ID,  MV_UPLOAD_ID, MV_ISIN, MV_MIC,  MV_AS_OF_DATE,  MV_FIELDNAME,  MV_TIMESTAMP,  MV_STRINGVALUE, MV_COMMENT)
-  select MVU_SOURCE_ID, @upload_id,  MVU_ISIN, MVU_MIC, MVU_AS_OF_DATE, MVU_FIELDNAME, MVU_TIMESTAMP, MVU_STRINGVALUE, @COMMENT 
+  select MVU_SOURCE_ID, @upload_id,  MVU_ISIN, MVU_MIC, MVU_AS_OF_DATE, MVU_FIELDNAME, MVU_TIMESTAMP, MVU_STRINGVALUE, MVU_COMMENT 
    from vv_mastervalues_upload
   where MVU_SOURCE_ID = @SOURCE_ID
 
@@ -141,7 +142,7 @@ print 'procedure finished, @upload_id='+CONVERT(varchar(10), @upload_id)
 /*
 
 insert vv_mastervalues_upload select top 99 * from vv_mastervalues
-exec vvsp_import_uploadV2 'DBAG', 'b', 'c', 'd'
+exec vvsp_import_uploadV2 'DBAG', 'x', 'x', 'x'
 
 insert vv_mastervalues_upload select * from vv_upload_beispiel
 
