@@ -1,4 +1,4 @@
-﻿-- 26.04.2017 KB: Funktion dbo.fn_vv_current_value erstellt und Testdaten ausgedacht
+-- 26.04.2017 KB: Funktion dbo.fn_vv_current_value erstellt und Testdaten ausgedacht
 -- 27.04.2017 KB: Parameter @SOURCE_ID ergänzt
 
 Use MasterData
@@ -50,4 +50,3 @@ select dbo.fn_vv_current_value('DBAG','DE0007100000', 'XFRA', '20170314', 'Closi
 select * from vv_mastervalues where MV_ISIN='DE0007100000'      
      
 */
--- Thomas Kommentar
