@@ -5,6 +5,8 @@
 -- 07.05.17 KB: Neues Feld MV_UPLOAD_ID eingebaut
 -- 08.06.17 KB: Neues Feld MV_LAST_SEEN behandelt, NEue Tabelle vv_updates eingebaut, neue Version uploadV2 (alte Vers=wrapper)
 -- 18.06.17 KB: In der Datenübernahme in vv_mastervalues (Step5) statt @COMMENT jetzt Feld MVU_COMMENT aus der Quelltabelle genutzt
+-- 12.07.17 AG: Anpassung: Upload erhällt als zusätzliche Condition auf Data_Origin zu achten, neben Source_Id, Änderungen: (Z:52, Z:62, Z:102, Z:115)
+-- 12.07.17 AG: Z:126 ein Leerzeichen wurde hinzugefügt, für bessere Lesbarkeit (Nach der Source_ID ein Leerzeichen, damit die Zahl nicht direkt dran gehängt wird)
 
 use MasterData
 go
@@ -35,11 +37,11 @@ set @now = getdate()
 
 ----- Eintrag in VV_LOG machen
 insert vv_log 
-  select @now,                       -- LOG_TIMESTAMP
-         user_name(),                -- LOG_USER_ID
-         HOST_NAME(),                -- LOG_HOST_NAME,          
-         'vvsp_import_uploadV2',       -- LOG_PROGRAM_NAME
-         'start ',                    -- LOG_VERARBEITUNGSSTATUS 
+  select @now,						-- LOG_TIMESTAMP
+         user_name(),				-- LOG_USER_ID
+         HOST_NAME(),				-- LOG_HOST_NAME,          
+         'vvsp_import_uploadV2',	-- LOG_PROGRAM_NAME
+         'start ',					-- LOG_VERARBEITUNGSSTATUS 
          'procedure started, @SOURCE_ID='+CONVERT(varchar(12),@SOURCE_ID)     -- LOG_TEXT
 
 begin tran
@@ -48,7 +50,7 @@ begin tran
   select @upload_id = MAX(UPL_UPLOAD_ID)+1 from vv_uploads WITH (TABLOCK, HOLDLOCK)
 
   select @received_rows = COUNT(*) from vv_mastervalues_upload WITH (TABLOCK, HOLDLOCK)
-                                   where MVU_SOURCE_ID = @SOURCE_ID
+                                   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
 
   -- STEP 2: Remove duplicate rows from the source table
   delete T1
@@ -58,7 +60,7 @@ begin tran
                                  ) ROWNUM
        FROM vv_mastervalues_upload) T1
   where ROWNUM>1
-    and MVU_SOURCE_ID = @SOURCE_ID
+    and MVU_SOURCE_ID = @SOURCE_ID  and MVU_DATA_ORIGIN = @DATA_ORIGIN 
     
   set @identical_rows = @@ROWCOUNT
 
@@ -73,9 +75,9 @@ begin tran
      and ((MVU_MIC is null and MV_MIC is null) or MVU_MIC = MV_MIC )
      and ((MVU_AS_OF_DATE is null and  MV_AS_OF_DATE  is null) or MVU_AS_OF_DATE = MV_AS_OF_DATE)
      and ((MVU_STRINGVALUE is null and MV_STRINGVALUE is null) or MVU_STRINGVALUE = MV_STRINGVALUE)
-   where T1.MVU_SOURCE_ID = @SOURCE_ID
+   where T1.MVU_SOURCE_ID = @SOURCE_ID and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN 
 
-  set @seen_rows = @@ROWCOUNT  -- mus gleich @existing_rows sein !
+  set @seen_rows = @@ROWCOUNT  -- muss gleich @existing_rows sein !
 
 
   -- STEP 4: Alle upload-Daten verwerfen, deren Werte schon bekannt (d.h. in vv_mastervalue vorhanden) sind
@@ -88,7 +90,7 @@ begin tran
      and ((MVU_MIC is null and MV_MIC is null) or MVU_MIC = MV_MIC )
      and ((MVU_AS_OF_DATE is null and  MV_AS_OF_DATE  is null) or MVU_AS_OF_DATE = MV_AS_OF_DATE)
      and ((MVU_STRINGVALUE is null and MV_STRINGVALUE is null) or MVU_STRINGVALUE = MV_STRINGVALUE)
-   where T1.MVU_SOURCE_ID = @SOURCE_ID
+   where T1.MVU_SOURCE_ID = @SOURCE_ID  and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN 
    
   set @existing_rows = @@ROWCOUNT
 
@@ -98,7 +100,7 @@ begin tran
         (MV_SOURCE_ID,  MV_UPLOAD_ID, MV_ISIN, MV_MIC,  MV_AS_OF_DATE,  MV_FIELDNAME,  MV_TIMESTAMP,  MV_STRINGVALUE, MV_COMMENT)
   select MVU_SOURCE_ID, @upload_id,  MVU_ISIN, MVU_MIC, MVU_AS_OF_DATE, MVU_FIELDNAME, MVU_TIMESTAMP, MVU_STRINGVALUE, MVU_COMMENT 
    from vv_mastervalues_upload
-  where MVU_SOURCE_ID = @SOURCE_ID
+  where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
 
   set @inserted_rows = @@ROWCOUNT
 
@@ -111,7 +113,7 @@ begin tran
   
   -- STEP 7: Upload-Tabelle für die erledigte Source-ID löschen
   delete vv_mastervalues_upload
-   where MVU_SOURCE_ID = @SOURCE_ID
+   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
 
 
   insert vv_log 
@@ -121,7 +123,7 @@ begin tran
          'vvsp_import_uploadV2',            -- LOG_PROGRAM_NAME, ist varchar(32) in vv_LOG
          'done',                            -- LOG_VERARBEITUNGSSTATUS 
          'procedure finished, @upload_id='+CONVERT(varchar(10), @upload_id)
-                               +', @SOURCE_ID='+CONVERT(varchar(12),@SOURCE_ID)
+                               +', @SOURCE_ID='+CONVERT(varchar(12),@SOURCE_ID)+' '
                                +CONVERT(varchar(12),@received_rows)+' rows received, '
                                +CONVERT(varchar(12),@identical_rows)+' duplicate rows deleted, '  
                                +CONVERT(varchar(12),@seen_rows)+' existing rows updated, '  
