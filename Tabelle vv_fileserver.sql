@@ -8,12 +8,14 @@ drop table [dbo].[vv_fileserver]
 GO
 
 CREATE TABLE [dbo].[vv_fileserver](
-	[fs_filename] [char](64) NOT NULL,		-- Name der Datei
-	[fs_location] [char](512) NOT NULL,		-- FullPath der Datei
+	[fs_filename] [char](256) NOT NULL,		-- Name der Datei
+	[fs_location] [char](1024) NOT NULL,	-- FullPath der Datei
 	[fs_fk_user] int NOT NULL,				-- Foreign Key, verweis auf User
-	[fs_establishment] [char](16) NOT NULL,	-- Name des Unternehmens
+	[fs_isin] [char](12) NOT NULL,			-- Name des Unternehmens
 	[fs_timestamp] [datetime] NOT NULL CONSTRAINT [fs_timestamp_GETDATE]  DEFAULT (getdate()),
 	[fs_ip] [char] (256) not null,			-- Ip Adresse des Uploads
+	[fs_data_origin] varchar(256),			-- Die Quelle, woher die Datei Stammt
+	[fs_data_type]   varchar(64),			-- Typ der datei zb KIID, FACTSHEET
 	[fs_comment] [varchar] (256) not null,	-- Kommentar
 ) ON [PRIMARY]
 
