@@ -1,6 +1,7 @@
 -- 26.04.2017 KB: Tabelle dbo.vv_mastervalues erstellt und Testdaten ausgedacht
 -- 27.04.2017 KB: MV_SOURCE_ID eingefügt und statt MV_SOURCE jetzt MV_DATA_ORIGIN. MV_FIELDNAME verlängert.
 -- 05.05.2017 KB: Bugfix bei Index und constraint
+-- 31.07.2017 AG: Hinzunahme der Spalte MVU_SOURCEFILE
 
 Use MasterData
 go
@@ -20,6 +21,7 @@ CREATE TABLE dbo.vv_mastervalues_upload
   MVU_STRINGVALUE varchar(256),       -- Der Wert des Felds, zB "DAIMLER AG NAMENS-AKTIEN O.N."
   MVU_DATA_ORIGIN varchar(256),       -- Die Quelle, woher wir diesen wert haben, zB "File 20170426_Frankfurt_Data.csv"
   MVU_URLSOURCE   varchar(256),       -- Wenn relevant, der URL-Link der Quelle, zB "http://www.deutsche-boerse-cash-market.com/dbcm-de/instrumente-statistiken/alle-handelbaren-instrumente/boersefrankfurt"
+  MVU_SOURCEFILE  varchar(256),       -- Name der Datei, aus der die Daten Stammen (falls über Datei-Upload geschehen)
   MVU_COMMENT     varchar(256)        -- Optional für freie Kommentare, z.B. "manueller upload nach Formatänderung"
 )
   
