@@ -2,7 +2,7 @@
 -- 30.06.17 AG: Anpassung an MIC select, sodass leere MICS ignoriert werden
 -- 30.07.17 KB: Dynamik über Tabelle vv_field_definitions eingebaut. 
 --              Neue Felder in Return-Set: SEQUENCE_NUM, DATA_ORIGIN, URLSOURCE, SOURCE_NUM
-
+-- 03.08.17 KB: Source ID und Timestamp im Result zurückliefern
 use MasterData
 go
 
@@ -47,22 +47,24 @@ create table #felder
 
 create table #result
 (
-  SEQUENCE_NUM int,
-  LEVEL1       varchar(50) not null,  -- hier kommt der Feldname rein     
-  LEVEL2       varchar(50),           -- hier kann ggf ein zweiter unter-Feldname zur weiteren Unterteilung reinkommen
-  STRINGVALUE  varchar(256),   -- Der Wert des Feldes
-  DATA_ORIGIN  varchar(256),   -- Die Quelle, woher wir diesen Wert haben (zweite Zeile unserer Quellangabe). Wenn von Webseite dann der TITLE, 'Download' bei Download mittels Loader, 'User Upload' bei Upload von User, 'manual' wenn manuelle Eingabe,...
-  URLSOURCE    varchar(256),   -- URL-Link oder IP der Quelle (erste Zeile unserer Quellangabe), zB "http://www.deutsche-boerse-cash-market.com/dbcm-de/instrumente-statistiken/alle-handelbaren-instrumente/boersefrankfurt"
-  SOURCE_NUM   int             -- Zähler der Quellen innerhalb eines Feldes (also innerhalb des gleichen LEVEL1-Wert)
+  SOURCE_ID    char(8),       -- aus VV_FIELD_DEFINITIONS, z.B. "DBAG" für Dt.Börse (identisch mit Feld in mastervalues)
+  SEQUENCE_NUM int,           -- aus VV_FIELD_DEFINITIONS die Reihenfolge in der Ansicht
+  FIELDNAME    char(48),      -- aus VV_FIELD_DEFINITIONS der von uns vergebene Feldname (ggf. Level1.Level2 mit Punkt)
+  SOURCE_NUM   int,           -- aus VV_FIELD_DEFINITIONS der Zähler der Quellen innerhalb eines Feldes
+  STRINGVALUE  varchar(256),  -- aus VV_MASTERVALUES der Inhalt des Feldes
+  RECORD_DATE  datetime,      -- aus VV_MASTERVALUES entweder (wenn vorhanden) Wert aus MV_LAST_SEEN, sonst aus MV_TIMESTAMP
+  DATA_ORIGIN  varchar(256),  -- aus VV_UPLOADS die Quelle, woher wir diesen Wert haben (zweite Zeile unserer Quellangabe). Wenn von Webseite dann der TITLE, 'Download' bei Download mittels Loader, 'User Upload' bei Upload von User, 'manual' wenn manuelle Eingabe,...
+  URLSOURCE    varchar(256),  -- aus VV_UPLOADS der URL-Link oder die IP der Quelle (erste Zeile unserer Quellangabe), zB "http://www.deutsche-boerse-cash-market.com/dbcm-de/instrumente-statistiken/alle-handelbaren-instrumente/boersefrankfurt"
 )  
 
 
 -- alle anzuzeigenden Felder aus der Definitionstabelle holen (mit Sortiernummer und Handhabungshinweis)
 
 insert #felder
-select distinct FD_SEQUENCE_NUM, FD_FIELDNAME, FD_HANDLING
+select min(FD_SEQUENCE_NUM), FD_FIELDNAME, min(FD_HANDLING)  -- SEQUENCE_NUM und HANDLINNG olle eindeutig pro Feld sein
   from vv_field_definitions
- where FD_USER is null    -- momentan hier nur System-Einstellungen, userabhängige kommen später (dafür ist neuer Parameter nötig)
+ where FD_USER is null    -- momentan gibt es nur System-Einstellungen, userabhängige kommen später (dafür ist neuer Parameter nötig)
+ group by FD_FIELDNAME
 
 -- jetzt alle Felder nacheinander abarbeiten
 while (select count(*) from #felder) > 0
@@ -71,41 +73,65 @@ begin
     from #felder
    order by SEQUENCE_NUM
   
-  delete #felder where @SEQUENCE_NUM =  SEQUENCE_NUM and @FIELDNAME = FIELDNAME   -- handling egal
+  delete #felder where @FIELDNAME = FIELDNAME   -- was jetzt bearbeitet wird, kann hier schonmal raus
   
-  if @FIELDNAME= 'ISIN'  -- Sonderbehandlung ISIN-Feld
+  if @FIELDNAME= 'ISIN'    -- Sonderbehandlung ISIN-Feld. Inhalt ist ja klar, aber Quellen und Datum wollen wir zeigen
   begin
-    if @HANDLING ='AKT'  -- aktuellste Quelle zuerst
+    if @HANDLING ='AKT'    -- aktuellste Quelle zuerst
       insert #result 
-      select top 1 @SEQUENCE_NUM, 'ISIN', null, @ISIN, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM
-        from vv_mastervalues
-       inner join vv_field_definitions           -- Felddefinition nachschlagen, wo...
+      select top 1 
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME,     -- hier konstant "ISIN"
+             FD_SOURCE_NUM, 
+             @ISIN,            -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
+             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
+        from VV_MASTERVALUES
+       inner join VV_FIELD_DEFINITIONS           -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM     -- ...Sequenznummer die gerade bearbeitete ist 
          and FD_FIELDNAME    = @FIELDNAME        -- ...Feldname der gerade bearbeitete ist 
          and FD_SOURCE_ID    = MV_SOURCE_ID      -- ...die Source soll in mastervalues nachgesehen werden
-       inner join vv_uploads                     -- in den uploads stehen die SOURCE-Felder ...
+       inner join VV_UPLOADS                     -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID        -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by MV_TIMESTAMP desc                -- größter timestamp-Wert (also der aktuellste) zuerst
+       order by coalesce(MV_TIMESTAMP, MV_LAST_SEEN ) desc        -- größter Wert (also der aktuellste) zuerst
   
      if @HANDLING ='FIRST'  -- die erste Quelle aus meinen gewünschten Quelldefintionen nehmen, dei einen Wert hat
         or @HANDLING ='UNIQ'  -- aus allen Quellen nur die unterschiedlichen Werte anzeigen (bei ISIN identisch)
       insert #result 
-      select top 1 @SEQUENCE_NUM, 'ISIN', null, @ISIN, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM
-        from vv_mastervalues
-       inner join vv_field_definitions           -- Felddefinition nachschlagen, wo...
+      select top 1 
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME,       -- hier konstant "ISIN"
+             FD_SOURCE_NUM, 
+             @ISIN,              -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
+             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
+        from VV_MASTERVALUES
+       inner join VV_FIELD_DEFINITIONS           -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM     -- ...Sequenznummer die gerade bearbeitete ist 
          and FD_FIELDNAME    = @FIELDNAME        -- ...Feldname der gerade bearbeitete ist 
          and FD_SOURCE_ID    = MV_SOURCE_ID      -- ...die Source soll in mastervalues nachgesehen werden
-       inner join vv_uploads                     -- in den uploads stehen die SOURCE-Felder ...
+       inner join VV_UPLOADS                     -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID        -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by FD_SOURCE_NUM desc               -- sortiert wie in Definition gegeben
+       order by FD_SOURCE_NUM                    -- sortiert wie in Definition gegeben
 
      if @HANDLING ='ALL'  -- alle Quellen angeben (auch wenn alle gleich sind)
       insert #result 
-      select @SEQUENCE_NUM, 'ISIN', null, @ISIN, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM  -- wegen ALL ohne TOP1-Einschränkung
-        from vv_mastervalues
+      select -- wegen ALL ohne TOP1-Einschränkung, dafür unten grouping 
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME,     -- hier konstant "ISIN"
+             FD_SOURCE_NUM, 
+             @ISIN,            -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
+             max(coalesce(MV_TIMESTAMP, MV_LAST_SEEN)),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
+        from VV_MASTERVALUES
        inner join VV_FIELD_DEFINITIONS           -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM     -- ...Sequenznummer die gerade bearbeitete ist 
          and FD_FIELDNAME = @FIELDNAME           -- ...Feldname der gerade bearbeitete ist 
@@ -113,7 +139,8 @@ begin
        inner join VV_UPLOADS                     -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID        -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by FD_SOURCE_NUM desc               -- sortiert wie in Definition gegeben
+       group by FD_SOURCE_ID, FD_SEQUENCE_NUM, FD_FIELDNAME, FD_SOURCE_NUM, UPL_DATA_ORIGIN, UPL_URLSOURCE
+       order by FD_SOURCE_NUM                    -- sortiert wie in Definition gegeben
  
     continue -- zum WHILE-Kopf   
   end -- of ISIN
@@ -123,7 +150,15 @@ begin
    
    -- das hier ist noch SCHROTT und muss überdacht werden, insbesondere wenn künftig mehr Quellen hinzu kommen 
    insert #result 
-   select distinct 101, 'Handelsplätze', MV_MIC, dbo.fn_vv_current_value('DBAG', @ISIN, MV_MIC, null, 'Market Segment'), 'fehlt noch','fehlt noch',1   -- Marktsegment ist nur eine NOTLÖSUNG, nachsehen in Tabelle MIC wäre besser
+   select distinct 
+      'DBAG', 
+      101, 
+      'Handelsplätze',
+       1, 
+       MV_MIC+' ('+dbo.fn_vv_current_value('DBAG', @ISIN, MV_MIC, null, 'Market Segment')+')',    -- Marktsegment ist nur eine NOTLÖSUNG, nachsehen in Tabelle MIC wäre besser
+       convert(datetime,'20170101'),
+       'fehlt noch',
+       'fehlt noch'
     from vv_mastervalues
    where MV_ISIN=@ISIN and not MV_MIC=''
 
@@ -135,7 +170,15 @@ begin
 
     if @HANDLING ='AKT'  -- aktuellste Quelle zuerst
       insert #result 
-      select top 1 @SEQUENCE_NUM, @FIELDNAME, null, MV_STRINGVALUE, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM
+      select top 1 
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME, 
+             FD_SOURCE_NUM, 
+             MV_STRINGVALUE, 
+             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
         from VV_MASTERVALUES
        inner join VV_FIELD_DEFINITIONS              -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM        -- ...Sequenznummer die gerade bearbeitete ist 
@@ -145,11 +188,19 @@ begin
        inner join VV_UPLOADS                        -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID           -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by MV_TIMESTAMP desc                   -- größter timestamp-Wert (also der aktuellste) zuerst
+       order by coalesce(MV_TIMESTAMP, MV_LAST_SEEN) desc    -- größter Wert (also der aktuellste) zuerst
   
     if @HANDLING ='FIRST'  -- die erste Quelle aus meinen gewünschten Quelldefintionen nehmen, dei einen Wert hat
       insert #result 
-      select top 1 @SEQUENCE_NUM, @FIELDNAME, null, MV_STRINGVALUE, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM
+      select top 1
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME, 
+             FD_SOURCE_NUM, 
+             MV_STRINGVALUE, 
+             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
         from VV_MASTERVALUES
        inner join VV_FIELD_DEFINITIONS              -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM        -- ...Sequenznummer die gerade bearbeitete ist 
@@ -164,7 +215,15 @@ begin
     if @HANDLING ='ALL'  -- alle Quellen angeben (auch wenn alle gleich sind)
          or @HANDLING ='UNIQ'  -- bei UNIQ gehen wir zunächst vor wie bei ALL, aber löschen gleich was...
       insert #result
-      select @SEQUENCE_NUM, @FIELDNAME, null, MV_STRINGVALUE, UPL_DATA_ORIGIN, UPL_URLSOURCE, FD_SOURCE_NUM
+      select 
+             FD_SOURCE_ID, 
+             FD_SEQUENCE_NUM, 
+             FD_FIELDNAME, 
+             FD_SOURCE_NUM, 
+             MV_STRINGVALUE, 
+             max(coalesce(MV_TIMESTAMP, MV_LAST_SEEN)),
+             UPL_DATA_ORIGIN, 
+             UPL_URLSOURCE
         from VV_MASTERVALUES
        inner join VV_FIELD_DEFINITIONS              -- Felddefinition nachschlagen, wo...
           on FD_SEQUENCE_NUM = @SEQUENCE_NUM        -- ...Sequenznummer die gerade bearbeitete ist 
@@ -174,25 +233,34 @@ begin
        inner join VV_UPLOADS                        -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID           -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
+	   group by FD_SOURCE_ID, FD_SEQUENCE_NUM, FD_FIELDNAME, FD_SOURCE_NUM, MV_STRINGVALUE, UPL_DATA_ORIGIN, UPL_URLSOURCE
        order by VV_FIELD_DEFINITIONS.FD_SOURCE_NUM       -- sortiert wie in Definition gegeben
 
     if @HANDLING ='UNIQ'  -- jeden Wert nur einmal angeben, öfters vorkommende jetzt wieder entfernen...
       delete R1           -- (Achtung, es kann immer noch doppelte geben, wenn EINE source den Wert zweimal enthält)
         from #result R1
        where SEQUENCE_NUM = @SEQUENCE_NUM
-         and LEVEL1 = @FIELDNAME
-         and SOURCE_NUM > (select MIN(SOURCE_NUM)
-                             from #result R2 
-                            where R2.SEQUENCE_NUM = @SEQUENCE_NUM
-                              and R2.LEVEL1 = @FIELDNAME
-                              and R2.STRINGVALUE = R1.STRINGVALUE
+         and FIELDNAME = @FIELDNAME
+         and SOURCE_NUM > (select MIN(SOURCE_NUM)                    -- alle source_num außer der kleinsten löschen
+                             from #result R2                         --
+                            where R2.SEQUENCE_NUM = @SEQUENCE_NUM    -- ...die für dieses Feld
+                              and R2.FIELDNAME = @FIELDNAME          --
+                              and R2.STRINGVALUE = R1.STRINGVALUE    -- ...den gleichen Wert haben
                                  )
 
   
   end -- of while
 
-
-  select distinct * from #result    
+  -- jetzt Rückgabe der Werte
+  select SOURCE_ID,
+         SEQUENCE_NUM,
+         FIELDNAME,
+         SOURCE_NUM,
+         STRINGVALUE,
+         RECORD_DATE,
+         DATA_ORIGIN,
+         URLSOURCE
+    from #result    
 
 return
   
