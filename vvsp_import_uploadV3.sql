@@ -8,6 +8,8 @@
 -- 12.07.17 AG: Anpassung: Upload erhällt als zusätzliche Condition auf Data_Origin zu achten, neben Source_Id, Änderungen: (Z:52, Z:62, Z:102, Z:115)
 -- 12.07.17 AG: Z:126 ein Leerzeichen wurde hinzugefügt, für bessere Lesbarkeit (Nach der Source_ID ein Leerzeichen, damit die Zahl nicht direkt dran gehängt wird)
 -- 30.07.17 KB: V3: neuen Parameter @SOURCEFILE hinzugefügt
+-- 31.07.17 AG: Hinzuname der Bedingung 'and MVU_SOURCEFILE = @SOURCEFILE'
+
 
 use MasterData
 go
@@ -52,7 +54,7 @@ begin tran
   select @upload_id = MAX(UPL_UPLOAD_ID)+1 from vv_uploads WITH (TABLOCK, HOLDLOCK)
 
   select @received_rows = COUNT(*) from vv_mastervalues_upload WITH (TABLOCK, HOLDLOCK)
-                                   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
+                                   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN and MVU_SOURCEFILE = @SOURCEFILE
 
   -- STEP 2: Remove duplicate rows from the source table
   delete T1
@@ -62,7 +64,7 @@ begin tran
                                  ) ROWNUM
        FROM vv_mastervalues_upload) T1
   where ROWNUM>1
-    and MVU_SOURCE_ID = @SOURCE_ID  and MVU_DATA_ORIGIN = @DATA_ORIGIN 
+    and MVU_SOURCE_ID = @SOURCE_ID  and MVU_DATA_ORIGIN = @DATA_ORIGIN  and MVU_SOURCEFILE = @SOURCEFILE
     
   set @identical_rows = @@ROWCOUNT
 
@@ -77,7 +79,7 @@ begin tran
      and ((MVU_MIC is null and MV_MIC is null) or MVU_MIC = MV_MIC )
      and ((MVU_AS_OF_DATE is null and  MV_AS_OF_DATE  is null) or MVU_AS_OF_DATE = MV_AS_OF_DATE)
      and ((MVU_STRINGVALUE is null and MV_STRINGVALUE is null) or MVU_STRINGVALUE = MV_STRINGVALUE)
-   where T1.MVU_SOURCE_ID = @SOURCE_ID and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN 
+   where T1.MVU_SOURCE_ID = @SOURCE_ID and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN  and T1.MVU_SOURCEFILE = @SOURCEFILE
 
   set @seen_rows = @@ROWCOUNT  -- muss gleich @existing_rows sein !
 
@@ -92,7 +94,7 @@ begin tran
      and ((MVU_MIC is null and MV_MIC is null) or MVU_MIC = MV_MIC )
      and ((MVU_AS_OF_DATE is null and  MV_AS_OF_DATE  is null) or MVU_AS_OF_DATE = MV_AS_OF_DATE)
      and ((MVU_STRINGVALUE is null and MV_STRINGVALUE is null) or MVU_STRINGVALUE = MV_STRINGVALUE)
-   where T1.MVU_SOURCE_ID = @SOURCE_ID  and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN 
+   where T1.MVU_SOURCE_ID = @SOURCE_ID  and T1.MVU_DATA_ORIGIN = @DATA_ORIGIN  and T1.MVU_SOURCEFILE = @SOURCEFILE
    
   set @existing_rows = @@ROWCOUNT
 
@@ -102,7 +104,7 @@ begin tran
         (MV_SOURCE_ID,  MV_UPLOAD_ID, MV_ISIN, MV_MIC,  MV_AS_OF_DATE,  MV_FIELDNAME,  MV_TIMESTAMP,  MV_STRINGVALUE, MV_COMMENT)
   select MVU_SOURCE_ID, @upload_id,  MVU_ISIN, MVU_MIC, MVU_AS_OF_DATE, MVU_FIELDNAME, MVU_TIMESTAMP, MVU_STRINGVALUE, MVU_COMMENT 
    from vv_mastervalues_upload
-  where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
+  where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN  and MVU_SOURCEFILE = @SOURCEFILE
 
   set @inserted_rows = @@ROWCOUNT
 
@@ -115,7 +117,7 @@ begin tran
   
   -- STEP 7: Upload-Tabelle für die erledigte Source-ID löschen
   delete vv_mastervalues_upload
-   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN 
+   where MVU_SOURCE_ID = @SOURCE_ID and MVU_DATA_ORIGIN = @DATA_ORIGIN  and MVU_SOURCEFILE = @SOURCEFILE
 
 
   insert vv_log 
