@@ -1,8 +1,3 @@
--- 30.06.17 KB: Ersten Entwurf der Prozedur erstellt.
--- 30.06.17 AG: Anpassung an MIC select, sodass leere MICS ignoriert werden
--- 30.07.17 KB: Dynamik über Tabelle vv_field_definitions eingebaut. 
---              Neue Felder in Return-Set: SEQUENCE_NUM, DATA_ORIGIN, URLSOURCE, SOURCE_NUM
--- 03.08.17 KB: Source ID und Timestamp im Result zurückliefern
 use MasterData
 go
 
@@ -10,6 +5,12 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[vvsp_get_m
   drop procedure dbo.vvsp_get_maininfoV2
 go
 
+-- 30.06.17 KB: Ersten Entwurf der Prozedur erstellt.
+-- 30.06.17 AG: Anpassung an MIC select, sodass leere MICS ignoriert werden
+-- 30.07.17 KB: Dynamik über Tabelle vv_field_definitions eingebaut. 
+--              Neue Felder in Return-Set: SEQUENCE_NUM, DATA_ORIGIN, URLSOURCE, SOURCE_NUM
+-- 03.08.17 KB: Source ID und Timestamp im Result zurückliefern
+-- 04.08.17 KB: Sortierung bei Rückgabe eingebaut
 create procedure dbo.vvsp_get_maininfoV2
   @ISIN char(12)
 as
@@ -85,7 +86,7 @@ begin
              FD_FIELDNAME,     -- hier konstant "ISIN"
              FD_SOURCE_NUM, 
              @ISIN,            -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
-             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             coalesce(MV_LAST_SEEN, MV_TIMESTAMP),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -96,7 +97,7 @@ begin
        inner join VV_UPLOADS                     -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID        -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by coalesce(MV_TIMESTAMP, MV_LAST_SEEN ) desc        -- größter Wert (also der aktuellste) zuerst
+       order by coalesce(MV_LAST_SEEN, MV_TIMESTAMP) desc        -- größter Wert (also der aktuellste) zuerst
   
      if @HANDLING ='FIRST'  -- die erste Quelle aus meinen gewünschten Quelldefintionen nehmen, dei einen Wert hat
         or @HANDLING ='UNIQ'  -- aus allen Quellen nur die unterschiedlichen Werte anzeigen (bei ISIN identisch)
@@ -107,7 +108,7 @@ begin
              FD_FIELDNAME,       -- hier konstant "ISIN"
              FD_SOURCE_NUM, 
              @ISIN,              -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
-             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             coalesce(MV_LAST_SEEN, MV_TIMESTAMP),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -128,7 +129,7 @@ begin
              FD_FIELDNAME,     -- hier konstant "ISIN"
              FD_SOURCE_NUM, 
              @ISIN,            -- an diese Stelle eben NICHT ein Inhalt aus der vv_masteralues-Tabelle
-             max(coalesce(MV_TIMESTAMP, MV_LAST_SEEN)),
+             max(coalesce(MV_LAST_SEEN, MV_TIMESTAMP)),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -176,7 +177,7 @@ begin
              FD_FIELDNAME, 
              FD_SOURCE_NUM, 
              MV_STRINGVALUE, 
-             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             coalesce(MV_LAST_SEEN, MV_TIMESTAMP),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -188,7 +189,7 @@ begin
        inner join VV_UPLOADS                        -- in den uploads stehen die SOURCE-Felder ...
           on UPL_UPLOAD_ID = MV_UPLOAD_ID           -- also für den komkreten Upload nacschlagen, woher er kam
        where MV_ISIN = @ISIN
-       order by coalesce(MV_TIMESTAMP, MV_LAST_SEEN) desc    -- größter Wert (also der aktuellste) zuerst
+       order by coalesce(MV_LAST_SEEN, MV_TIMESTAMP) desc    -- größter Wert (also der aktuellste) zuerst
   
     if @HANDLING ='FIRST'  -- die erste Quelle aus meinen gewünschten Quelldefintionen nehmen, dei einen Wert hat
       insert #result 
@@ -198,7 +199,7 @@ begin
              FD_FIELDNAME, 
              FD_SOURCE_NUM, 
              MV_STRINGVALUE, 
-             coalesce(MV_TIMESTAMP, MV_LAST_SEEN),
+             coalesce(MV_LAST_SEEN, MV_TIMESTAMP),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -221,7 +222,7 @@ begin
              FD_FIELDNAME, 
              FD_SOURCE_NUM, 
              MV_STRINGVALUE, 
-             max(coalesce(MV_TIMESTAMP, MV_LAST_SEEN)),
+             max(coalesce(MV_LAST_SEEN, MV_TIMESTAMP)),
              UPL_DATA_ORIGIN, 
              UPL_URLSOURCE
         from VV_MASTERVALUES
@@ -261,7 +262,8 @@ begin
          DATA_ORIGIN,
          URLSOURCE
     from #result    
-
+order by SEQUENCE_NUM asc , SOURCE_NUM asc, RECORD_DATE desc
+   
 return
   
 -----------------------------------------------------------------------------------------

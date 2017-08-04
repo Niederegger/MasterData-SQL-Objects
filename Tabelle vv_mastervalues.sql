@@ -27,8 +27,7 @@ CREATE TABLE dbo.vv_mastervalues
   MV_COMMENT      varchar(256)        -- Optional für freie Kommentare, z.B. "manuelle Korrektur" 
 )
   
-
-CREATE  INDEX vv_mastervalues_index2 ON dbo.vv_mastervalues(mv_timestamp, MV_ISIN, MV_FIELDNAME) WITH  FILLFACTOR = 95 -- clustered nach Timestamp, d.h. wächst i.d.R. nur am Ende weiter
+CREATE  INDEX vv_mastervalues_index2 ON dbo.vv_mastervalues(MV_ISIN, mv_source_id, MV_FIELDNAME, mv_upload_id) WITH  FILLFACTOR = 95 
 GO
 
 CREATE  INDEX vv_mastervalues_index3 ON dbo.vv_mastervalues(MV_ISIN, MV_MIC, MV_FIELDNAME, MV_AS_OF_DATE) WITH  FILLFACTOR = 90 -- für Kurssuche
